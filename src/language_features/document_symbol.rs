@@ -165,6 +165,10 @@ fn sticky_contexts_calc_ranges(
     }
 }
 
+pub fn indent_guides(_: EditorMeta, _: EditorParams, _: &mut Context) {
+    todo!()
+}
+
 pub fn text_document_document_symbol(meta: EditorMeta, ctx: &mut Context) {
     let eligible_servers: Vec<_> = ctx
         .language_servers
