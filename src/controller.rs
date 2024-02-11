@@ -603,8 +603,8 @@ fn dispatch_editor_request(request: EditorRequest, ctx: &mut Context) {
         request::DocumentSymbolRequest::METHOD => {
             document_symbol::text_document_document_symbol(meta, ctx);
         }
-        "kak-lsp/sticky-contexts" => {
-            document_symbol::sticky_contexts(meta, params, ctx);
+        "kak-lsp/breadcrumbs" => {
+            document_symbol::breadcrumbs(meta, params, ctx);
         }
         "kak-lsp/next-or-previous-symbol" => {
             document_symbol::next_or_prev_symbol(meta, params, ctx);

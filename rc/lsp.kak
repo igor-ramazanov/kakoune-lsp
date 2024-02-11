@@ -1,4 +1,4 @@
-### Options and faces ###
+## Options and faces ###
 
 # Feel free to update path and arguments according to your setup when sourcing lsp.kak directly.
 # Sourcing via `kak-lsp --kakoune` does it automatically.
@@ -33,8 +33,6 @@ set-face global ReferenceBind +u@Reference
 # Face for inlay hints.
 set-face global InlayHint cyan+d
 set-face global InlayCodeLens cyan+d
-# Face for sticky contexts
-set-face global StickyContexts +Fiud@Default
 
 # Options for tuning kak-lsp behaviour.
 
@@ -164,12 +162,10 @@ Capture groups must be:
     4: optional message
 } regex lsp_location_format ^\h*\K([^:\n]+):(\d+)\b(?::(\d+)\b)?(?::([^\n]+))
 
-declare-option -docstring "Number of sticky contexts to skip from the top" int lsp_sticky_contexts_skip 0
-declare-option -docstring "Max number of sticky contexts to show" int lsp_sticky_contexts_max 4
-
 # Callback functions. Override these to tune kak-lsp's behavior.
 
 declare-option -hidden str lsp_code_action_indicator
+
 define-command -hidden lsp-show-code-actions -params 1.. -docstring "Called when code actions are available for the main cursor position" %{
     set-option buffer lsp_modeline_code_actions %opt{lsp_code_action_indicator}
 }
@@ -345,16 +341,16 @@ declare-option -hidden range-specs cquery_semhl
 declare-option -hidden int lsp_timestamp -1
 declare-option -hidden range-specs lsp_references
 declare-option -hidden range-specs lsp_semantic_tokens
-declare-option -hidden range-specs lsp_sticky_contexts
 declare-option -hidden range-specs lsp_inlay_hints
 declare-option -hidden range-specs lsp_inlay_code_lenses
 declare-option -hidden line-specs lsp_code_lenses 0 '0| '
 declare-option -hidden str lsp_project_root
 
+declare-option -hidden str lsp_modeline_breadcrumbs ""
 declare-option -hidden str lsp_modeline_code_actions
 declare-option -hidden str lsp_modeline_progress ""
 declare-option -hidden str lsp_modeline_message_requests ""
-declare-option -hidden str lsp_modeline '%opt{lsp_modeline_code_actions}%opt{lsp_modeline_progress}%opt{lsp_modeline_message_requests}'
+declare-option -hidden str lsp_modeline '%opt{lsp_modeline_breadcrumbs}%opt{lsp_modeline_code_actions}%opt{lsp_modeline_progress}%opt{lsp_modeline_message_requests}'
 set-option global modelinefmt "%opt{lsp_modeline} %opt{modelinefmt}"
 
 ### Requests ###
@@ -1421,7 +1417,7 @@ incomingOrOutgoing = $1
 " | eval "${kak_opt_lsp_cmd} --request") > /dev/null 2>&1 < /dev/null & }
 }
 
-define-command -hidden lsp-sticky-contexts-request -docstring "request updating lsp_sticky_contexts for the buffer" %{
+define-command -hidden lsp-breadcrumbs-request -docstring "request updating lsp_modeline_breadcrumbs for the buffer" %{
   nop %sh{
     window_start_line="$(echo $kak_window_range | cut -d' ' -f1)"
 
@@ -1430,28 +1426,17 @@ session  = \"${kak_session}\"
 buffile  = \"${kak_buffile}\"
 filetype = \"${kak_opt_filetype}\"
 version  = ${kak_timestamp:-0}
-method   = \"kak-lsp/sticky-contexts\"
+method   = \"kak-lsp/breadcrumbs\"
 $([ -z ${kak_hook_param+x} ] || echo hook = true)
 [params]
-skip = $kak_opt_lsp_sticky_contexts_skip
-max = $kak_opt_lsp_sticky_contexts_max
 position_line = $kak_cursor_line
-window_start_line = $window_start_line
-window_width = $kak_window_width
 " | eval "${kak_opt_lsp_cmd} --request") > /dev/null 2>&1 < /dev/null & }
 }
 
-define-command lsp-sticky-contexts-enable -params 1 -docstring "lsp-sticky-contexts-enable <scope>: enable sticky contexts for <scope>" %{
-  add-highlighter -override "%arg{1}/lsp_sticky_contexts" replace-ranges lsp_sticky_contexts
-  hook -group lsp-sticky-contexts %arg{1} BufReload .* lsp-sticky-contexts-request
-  hook -group lsp-sticky-contexts %arg{1} NormalIdle .* lsp-sticky-contexts-request
-  hook -group lsp-sticky-contexts %arg{1} InsertIdle .* lsp-sticky-contexts-request
-} -shell-script-candidates %{ printf '%s\n' buffer global window }
+hook -group lsp-breadcrumbs %arg{1} BufReload .* lsp-breadcrumbs-request
+hook -group lsp-breadcrumbs %arg{1} NormalIdle .* lsp-breadcrumbs-request
+hook -group lsp-breadcrumbs %arg{1} InsertIdle .* lsp-breadcrumbs-request
 
-define-command lsp-sticky-contexts-disable -params 1 -docstring "lsp-sticky-contexts-disable <scope>: disable sticky contexts for <scope>" %{
-  remove-highlighter "%arg{1}/lsp_sticky_contexts"
-  remove-hooks %arg{1} lsp-sticky-contexts
-} -shell-script-candidates %{ printf '%s\n' buffer global window }
 
 define-command -hidden lsp-inlay-hints -docstring "lsp-inlay-hints: request inlay hints" %{
     declare-option -hidden int lsp_inlay_hints_timestamp -1

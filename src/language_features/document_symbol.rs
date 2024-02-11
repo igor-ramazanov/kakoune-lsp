@@ -1,9 +1,6 @@
 use crate::capabilities::{attempt_server_capability, CAPABILITY_DOCUMENT_SYMBOL};
 use crate::language_features::goto::edit_at_range;
 use crate::language_features::hover::editor_hover;
-use crate::position::get_line;
-use std::convert::TryFrom;
-
 use crate::markup::escape_kakoune_markup;
 use crate::position::{
     get_kakoune_position_with_fallback, get_kakoune_range, get_kakoune_range_with_fallback,
@@ -26,7 +23,7 @@ use std::path::{Path, PathBuf};
 use unicode_width::UnicodeWidthStr;
 use url::Url;
 
-pub fn sticky_contexts(meta: EditorMeta, editor_params: EditorParams, ctx: &mut Context) {
+pub fn breadcrumbs(meta: EditorMeta, editor_params: EditorParams, ctx: &mut Context) {
     let eligible_servers: Vec<_> = ctx
         .language_servers
         .iter()
@@ -47,7 +44,7 @@ pub fn sticky_contexts(meta: EditorMeta, editor_params: EditorParams, ctx: &mut 
             )
         })
         .collect();
-    let params = StickyContextsParams::deserialize(editor_params).unwrap();
+    let params = BreadcrumbsParams::deserialize(editor_params).unwrap();
     ctx.call::<DocumentSymbolRequest, _>(
         meta,
         RequestParams::Each(req_params),
@@ -57,7 +54,6 @@ pub fn sticky_contexts(meta: EditorMeta, editor_params: EditorParams, ctx: &mut 
                     if !symbols.is_empty() =>
                 {
                     let server = &ctx.language_servers[&server_name];
-                    let mut range_specs = String::default();
                     let document = if let Some(document) = ctx.documents.get(&meta.buffile) {
                         document
                     } else {
@@ -66,19 +62,23 @@ pub fn sticky_contexts(meta: EditorMeta, editor_params: EditorParams, ctx: &mut 
                     let mut filename_path = PathBuf::default();
                     let symbol = &symbols[0];
                     let filename = symbol_filename(&meta, symbol, &mut filename_path).to_string();
-                    sticky_contexts_calc_ranges(
+                    let mut breadcrumbs = Vec::default();
+                    breadcrumbs_calc(
                         &symbols,
                         &params,
                         ctx,
                         server,
                         document,
                         filename.as_str(),
-                        &mut range_specs,
-                        0,
+                        &mut breadcrumbs,
                     );
-                    let version = meta.version;
+                    if let Some(last) = breadcrumbs.last_mut() {
+                        *last = format!("{last} ");
+                    };
+                    let mut breadcrumbs = breadcrumbs.join(" -> ");
+                    breadcrumbs = editor_quote(breadcrumbs.as_str());
                     let command =
-                        formatdoc!("set-option buffer lsp_sticky_contexts {version} {range_specs}");
+                        format!("set-option buffer lsp_modeline_breadcrumbs {breadcrumbs}");
                     let command = format!(
                         "evaluate-commands -buffer {} -- {}",
                         editor_quote(&meta.buffile),
@@ -103,55 +103,32 @@ pub fn sticky_contexts(meta: EditorMeta, editor_params: EditorParams, ctx: &mut 
     );
 }
 
-fn sticky_contexts_calc_ranges(
+fn breadcrumbs_calc(
     symbols: &[DocumentSymbol],
-    params: &StickyContextsParams,
+    params: &BreadcrumbsParams,
     ctx: &Context,
     server: &ServerSettings,
     document: &Document,
     filename: &str,
-    acc: &mut String,
-    level: usize,
+    acc: &mut Vec<String>,
 ) {
-    let reached_max_level = level == params.max;
-    if reached_max_level {
-        return;
-    };
     for symbol in symbols {
-        let should_skip = level < params.skip;
         let symbol_range = get_kakoune_range(server, filename, &symbol.range, ctx).unwrap();
-        let symbol_selection_range =
-            get_kakoune_range(server, filename, &symbol.selection_range, ctx).unwrap();
         let is_inside = {
             let is_after_symbol_start = symbol_range.start.line <= params.position_line;
             let is_before_symbol_end = params.position_line <= symbol_range.end.line;
             is_after_symbol_start && is_before_symbol_end
         };
-        let is_invisible = params.window_start_line > symbol_range.start.line;
         if is_inside {
-            if !should_skip && is_invisible {
-                let source_line_content = &get_line(
-                    (symbol_selection_range.start.line - 1).try_into().unwrap(),
-                    &document.text,
-                )
-                .to_string()
-                .replace("\n", "");
-                let source_line_content = escape_tuple_element(source_line_content.as_str());
-                let source_line_content = escape_kakoune_markup(source_line_content.as_str());
-                let target_line: usize =
-                    usize::try_from(params.window_start_line).unwrap() + level + 1;
-                let target_line_content =
-                    &get_line((target_line - 1).try_into().unwrap(), &document.text)
-                        .to_string()
-                        .replace("\n", "");
-                let width = target_line_content.as_bytes().len();
-                let spec =
-                    &format!("{target_line}.1+{width}|{{StickyContexts}}{source_line_content}");
-                let spec = editor_quote(spec);
-                acc.push_str(spec.as_str());
-                acc.push(' ');
-            };
-            sticky_contexts_calc_ranges(
+            match symbol.kind() {
+                SymbolKind::FUNCTION | SymbolKind::METHOD => {
+                    acc.push(symbol.name.clone() + "()");
+                }
+                _ => {
+                    acc.push(symbol.name.clone());
+                }
+            }
+            breadcrumbs_calc(
                 symbol.children(),
                 params,
                 ctx,
@@ -159,7 +136,6 @@ fn sticky_contexts_calc_ranges(
                 document,
                 filename,
                 acc,
-                level + 1,
             );
             break;
         }
