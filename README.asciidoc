@@ -209,6 +209,9 @@ hook global WinSetOption filetype=rust %{
 * `lsp-sticky-contexts-enable` command to render sticky contexts at the top of the viewport window.
 ** `lsp_sticky_contexts_skip` option to specify the scope depth level to skip when rendering sticky contexts, default is `0`.
 ** `lsp_sticky_contexts_max` option to specify the max scope depth level to when rendering sticky contexts, default is `4`.
+* `lsp-indent-guides-enable` command to render indentation guides.
+** `lsp_indent_guides_characters` option to customize indentation guide characters, default is `│ ┆ ┊ ⸽`.
+** `lsp_indent_guides_skip` option to customize the scope level to render indentation guides from, default is `1`.
 * Breadcrumbs in the modeline indicating the symbol around the main cursor, like (`somemodule > someclass > somefunction`).
 ** To implement this, kakoune-lsp adds `%opt{lsp_modeline} ` to the front of your global `modelinefmt` at load time.
 * An hourglass character (⌛) in the modeline whenever the language server indicates it's busy.
